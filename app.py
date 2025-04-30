@@ -41,24 +41,32 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_text = event.message.text
-    if user_text.lower() == "股價":
+    user_text = event.message.text.strip()  # 去除多餘空白
+    print(f"收到訊息：{user_text}")  # 打印收到的訊息
+
+    if user_text.lower() == "股價":  # 當用戶輸入"股價"時
+        reply = "請輸入股票代號查詢股價"
+    else:
+        stock_symbol = user_text.upper() + ".TW"  # 假設股票代號是台灣股市代號，補上 .TW
         try:
             url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={stock_symbol}"
             response = requests.get(url)
-            price = response.json()["quoteResponse"]["result"][0]["regularMarketPrice"]
-            reply = f"📈 {stock_symbol} 現價：{price} 元"
+            print(f"API 回傳：{response.text}")  # 打印 API 回傳內容
+            result = response.json()["quoteResponse"]["result"]
+
+            if result:
+                price = result[0]["regularMarketPrice"]
+                reply = f"📈 {stock_symbol} 現價：{price} 元"
+            else:
+                reply = f"查無股票代號 {stock_symbol}，請確認輸入正確"
+
         except Exception as e:
             reply = f"讀取股價失敗：{e}"
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=reply)
-        )
-    else:
-        line_bot_api.reply_message(
-            event.reply_token,
-            TextSendMessage(text=f"你說的是：{user_text}")
-        )
+
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=reply)
+    )
 
 # === 背景執行：定時檢查股價並推播 ===
 def stock_price_broadcast():
