@@ -9,9 +9,9 @@ import twstock
 app = Flask(__name__)
 
 # === LINE 憑證 ===
-LINE_CHANNEL_ACCESS_TOKEN = "你的 Channel Access Token"
-LINE_CHANNEL_SECRET = "你的 Channel Secret"
-LINE_USER_ID = "你的 LINE User ID"  # 用於推播
+LINE_CHANNEL_ACCESS_TOKEN = "mc9Lu69WuEF2c36LwiDAJ5IgXInG99mcMAUrrIMp2XhduFqN1s1rTuzDNHWcKlkHXuuRB80llaVUCNrxr8mqHS/SEOXbIcLIW3egn8UFRTH+FSCtjibf+3arFZvvgh/74qcPP3sx31fgFxu7rofMZAdB04t89/1O/w1cDnyilFU="
+LINE_CHANNEL_SECRET = "0eefb4a8ff80e2eb09ee39adc5f93b4b"
+LINE_USER_ID = "U5de10eb0ddd73b88f37037d0ab03f42b"  # 用於推播
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
