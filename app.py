@@ -4,20 +4,20 @@ from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import threading
 import time
-import requests
+import twstock
 
 app = Flask(__name__)
 
-# === 替換為你自己的 LINE 憑證 ===
-LINE_CHANNEL_ACCESS_TOKEN = "mc9Lu69WuEF2c36LwiDAJ5IgXInG99mcMAUrrIMp2XhduFqN1s1rTuzDNHWcKlkHXuuRB80llaVUCNrxr8mqHS/SEOXbIcLIW3egn8UFRTH+FSCtjibf+3arFZvvgh/74qcPP3sx31fgFxu7rofMZAdB04t89/1O/w1cDnyilFU="
-LINE_CHANNEL_SECRET = "0eefb4a8ff80e2eb09ee39adc5f93b4b"
-LINE_USER_ID = "U5de10eb0ddd73b88f37037d0ab03f42b"
+# === LINE 憑證 ===
+LINE_CHANNEL_ACCESS_TOKEN = "你的 Channel Access Token"
+LINE_CHANNEL_SECRET = "你的 Channel Secret"
+LINE_USER_ID = "你的 LINE User ID"  # 用於推播
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# === 股票參數設定 ===
-stock_symbol = "2881.TW"
+# === 股票設定 ===
+stock_symbol = "2881"
 buy_price = 85.17
 take_profit = 93.3
 stop_loss = 79.8
@@ -41,64 +41,56 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_text = event.message.text.strip()  # 去除多餘空白
-    print(f"收到訊息：{user_text}")  # 打印收到的訊息
+    user_text = event.message.text.strip()
+    print(f"收到訊息：{user_text}")
 
-    if user_text.lower() == "股價":  # 當用戶輸入"股價"時
-        reply = "請輸入股票代號查詢股價"
+    if user_text.lower() == "id":
+        reply = f"你的 LINE User ID 是：{event.source.user_id}"
+    elif user_text.isdigit():
+        stock = twstock.realtime.get(user_text)
+        if stock["success"]:
+            name = stock["info"]["name"]
+            price = stock["realtime"]["latest_trade_price"]
+            reply = f"📈 {name}（{user_text}）現價：{price} 元"
+        else:
+            reply = f"查無此股票代碼：{user_text}"
     else:
-        stock_symbol = user_text.upper() + ".TW"  # 假設股票代號是台灣股市代號，補上 .TW
-        try:
-            url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={stock_symbol}"
-            response = requests.get(url)
-            print(f"API 回傳：{response.text}")  # 打印 API 回傳內容
-            result = response.json()["quoteResponse"]["result"]
-
-            if result:
-                price = result[0]["regularMarketPrice"]
-                reply = f"📈 {stock_symbol} 現價：{price} 元"
-            else:
-                reply = f"查無股票代號 {stock_symbol}，請確認輸入正確"
-
-        except Exception as e:
-            reply = f"讀取股價失敗：{e}"
+        reply = f"你說的是：{user_text}"
 
     line_bot_api.reply_message(
         event.reply_token,
         TextSendMessage(text=reply)
     )
 
-# === 背景執行：定時檢查股價並推播 ===
+# === 背景執行：定時推播 ===
 def stock_price_broadcast():
+    global already_notified
+
     while True:
         try:
-            url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={stock_symbol}"
-            response = requests.get(url)
-            result = response.json()["quoteResponse"]["result"]
-            if not result:
-                print(f"查無股票 {stock_symbol}")
-                time.sleep(60)
-                continue
+            stock = twstock.realtime.get(stock_symbol)
+            if stock["success"]:
+                price = float(stock["realtime"]["latest_trade_price"])
+                print(f"{stock_symbol} 現價：{price}")
 
-            price = result[0]["regularMarketPrice"]
-            print(f"{stock_symbol} 現價：{price}")
+                if price >= take_profit and not already_notified["take_profit"]:
+                    alert = f"🎯 {stock_symbol} 已達停利價：{price} 元（目標 {take_profit}）"
+                    line_bot_api.push_message(LINE_USER_ID, TextSendMessage(text=alert))
+                    already_notified["take_profit"] = True
 
-            if price >= take_profit and not already_notified["take_profit"]:
-                alert = f"🎯 {stock_symbol} 已達停利價：{price} 元（目標 {take_profit}）"
-                line_bot_api.push_message(LINE_USER_ID, TextSendMessage(text=alert))
-                already_notified["take_profit"] = True
+                elif price <= stop_loss and not already_notified["stop_loss"]:
+                    alert = f"⚠️ {stock_symbol} 已跌破停損價：{price} 元（目標 {stop_loss}）"
+                    line_bot_api.push_message(LINE_USER_ID, TextSendMessage(text=alert))
+                    already_notified["stop_loss"] = True
 
-            elif price <= stop_loss and not already_notified["stop_loss"]:
-                alert = f"⚠️ {stock_symbol} 已跌破停損價：{price} 元（目標 {stop_loss}）"
-                line_bot_api.push_message(LINE_USER_ID, TextSendMessage(text=alert))
-                already_notified["stop_loss"] = True
+            else:
+                print("讀取失敗")
 
         except Exception as e:
-            print(f"推播錯誤: {e}")
+            print(f"推播錯誤：{e}")
 
-        time.sleep(60)  # 每 60 秒檢查一次
+        time.sleep(60)
 
 if __name__ == "__main__":
-    # 啟動背景執行緒
     threading.Thread(target=stock_price_broadcast, daemon=True).start()
     app.run(host="0.0.0.0", port=8080)
